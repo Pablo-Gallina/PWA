@@ -1,8 +1,11 @@
 const CACHE_NAME = 'cache-1';
+const CACHE_STATIC_NAME  = 'static-v1'; // Lo del app sell
+const CACHE_DYNAMIC_NAME = 'dynamic-v1'; // Contenido dinamico
+const CACHE_INMUTABLE_NAME = 'inmutable-v1'; // Lo que nunca va a cambiar
 // * Guardando el app sell (lo que la pagina necesita para que funcione)
 self.addEventListener('install', event => {
     // ? Almacenar / grabar archivos en el cache
-    const saveCache = caches.open(CACHE_NAME)
+    const saveCacheStatic = caches.open(CACHE_STATIC_NAME)
         .then(cache => {
             return cache.addAll([
                 '/',
@@ -10,11 +13,18 @@ self.addEventListener('install', event => {
                 '/css/style.css',
                 '/img/main.jpg',
                 '/js/app.js',
-                'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css'
             ])
         })
     
-    event.waitUntil(saveCache); // esperar a que guarde todo, de lo contrario si necesitamos hacer uso de ejemplo, css, podria tirar error porque aun la promesa no ha terminado
+    // CACHE_INMUTABLE_NAME
+    const saveCacheInmutable = caches.open(CACHE_INMUTABLE_NAME)
+        .then(cache => {
+            return cache.addAll([
+                'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css',
+            ])
+        })
+    
+    event.waitUntil(Promise.all([saveCacheInmutable, saveCacheStatic])); // esperar a que guarde todo, de lo contrario si necesitamos hacer uso de ejemplo, css, podria tirar error porque aun la promesa no ha terminado
 });
 
 
@@ -44,8 +54,8 @@ self.addEventListener('fetch', e => {
             // No existe el archivo, buscalo en la web
             return fetch(e.request)
                 .then(newResponse => {
-
-                    caches.open(CACHE_NAME)
+                    // todas las peticiones que no esten en la app shell, quedaran en el CACHE_DYNAMIC_NAME
+                    caches.open(CACHE_DYNAMIC_NAME)
                         .then(cache => {
                             cache.put(e.request, newResponse); // 1 solicitud, 2 lo que contiene la respuesta
                         })
