@@ -95,28 +95,54 @@ self.addEventListener('install', event => {
 // * --------------- 3 Network with cache fallback
 // Ir primero al internet y despues al cache
 // Util, por ejemplo para twitter, entras a la web y traes los tweets mas recientes, pero no tienes conexion a internet, entonces te mostrará solo guardados por el cache
-self.addEventListener('fetch', e => {
-    // Primero hacemos la peticion a la web
-    const respuesta = fetch( e.request ).then( res => {
-        // si no se encontro en la web el archivo, revisa en el cache
-        if ( !res ) return caches.match( e.request );
+// self.addEventListener('fetch', e => {
+//     // Primero hacemos la peticion a la web
+//     const respuesta = fetch( e.request ).then( res => {
+//         // si no se encontro en la web el archivo, revisa en el cache
+//         if ( !res ) return caches.match( e.request );
         
-        // Guardarlo en el cache (sino esta)
-        caches.open( CACHE_DYNAMIC_NAME )
-            .then( cache => {
-                cache.put( e.request, res );
-                limpiarCache( CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT );
-            });
+//         // Guardarlo en el cache (sino esta)
+//         caches.open( CACHE_DYNAMIC_NAME )
+//             .then( cache => {
+//                 cache.put( e.request, res );
+//                 limpiarCache( CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT );
+//             });
     
     
-        return res.clone();
+//         return res.clone();
     
-    }).catch( err =>{ // Si hay algun error (no tenemos conexion a internet), verifica si existe en el cache
-        return caches.match( e.request );
-    });
+//     }).catch( err =>{ // Si hay algun error (no tenemos conexion a internet), verifica si existe en el cache
+//         return caches.match( e.request );
+//     });
 
-    // responder con la respuesta
-    e.respondWith(respuesta);
-})
+//     // responder con la respuesta
+//     e.respondWith(respuesta);
+// })
 //!Problemas con el Network with cache fallback, es mucho mas lento que la estrategia 2, porque primero va a la web y luego al cache
 //!Siempre traera lo mas reciente, problema es el consumo de datos, es mucho mayor (no es una principal desventaja pero puede afectar a cierto gurpo de personas)
+
+// * --------------- 4 Cache with network update
+// Util cuando el rendimiento es crítico, que aparezca lo mas rapido posible nuestra aplicacion
+// Nos interesa que siempre este actualizado, pero siempre estara un paso atrás (doble refresh para actualizar todo)
+self.addEventListener('fetch', e => {
+    // si la peticion incluye bootstrap (archivo inmutable), busca en el cache y retornalo
+    if ( e.request.url.includes('bootstrap') ) {
+        return e.respondWith( caches.match( e.request ) );
+    }
+
+    // Solo vamos a trabajar con el static cache, porque es lo de la app shell, y con esto conseguimos que nuestra pagina carge rapido (necesitamos que el rendimiento sea critico / rapido)
+    const respuesta = caches.open( CACHE_STATIC_NAME ).then( cache => {
+        // Siempre se hace cuando sabemos que el cache lo tenemos, no es algo que sea dinámico
+
+        // actualizar cache, obtener la ultima version que se encuentre en la web, pero no retorna esta version, solo lo guarda (refrescar la app, aparece esta version)
+        fetch( e.request ).then( newRes => 
+                cache.put( e.request, newRes ));
+        
+        // retorna con la peticion que concida en el cache, retorna la version anterior en caso de que exista un nuevo cache
+        return cache.match( e.request );
+
+    });
+    // responder con la respuesta
+    e.respondWith( respuesta );
+})
+//!Problemas no tenedriamos la ultima version de la app, si es que cambio, hasta que refresquemos la pagina otra vez
