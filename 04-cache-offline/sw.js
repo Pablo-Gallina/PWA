@@ -2,6 +2,28 @@ const CACHE_NAME = 'cache-1';
 const CACHE_STATIC_NAME  = 'static-v1'; // Lo del app sell
 const CACHE_DYNAMIC_NAME = 'dynamic-v1'; // Contenido dinamico
 const CACHE_INMUTABLE_NAME = 'inmutable-v1'; // Lo que nunca va a cambiar
+
+const CACHE_DYNAMIC_LIMIT = 1;
+
+// Limpoiar el cache y dejarlo con un limite de elementos a cachear
+function limpiarCache( cacheName, numeroItems ) {
+    // Abrir el cacheName
+    caches.open( cacheName )  //retorna una promesa
+        .then( cache => {
+
+            return cache.keys()
+                .then( keys => {
+                    // Si en el cache existen mas de "numeroItems", entonces elimina los restantes
+                    if ( keys.length > numeroItems ) {
+                        // Eliminar el cache
+                        cache.delete( keys[0] )
+                            .then( limpiarCache(cacheName, numeroItems) ); // Volver a ejecutra la funcion hasta que hallas eliminado todos los excedentes
+                    }
+                });
+
+            
+        });
+}
 // * Guardando el app sell (lo que la pagina necesita para que funcione)
 self.addEventListener('install', event => {
     // ? Almacenar / grabar archivos en el cache
@@ -46,7 +68,7 @@ self.addEventListener('install', event => {
 
 self.addEventListener('fetch', e => {
     // 1 Primero verificar si el archivo existe en el cache
-    caches.match(e.request)
+    const respuesta = caches.match(e.request)
         .then(res => {
             // Si el archivo existe en el cache, reotrnalo
             if (res) return res;
@@ -58,11 +80,13 @@ self.addEventListener('fetch', e => {
                     caches.open(CACHE_DYNAMIC_NAME)
                         .then(cache => {
                             cache.put(e.request, newResponse); // 1 solicitud, 2 lo que contiene la respuesta
+                            limpiarCache( CACHE_DYNAMIC_NAME, CACHE_DYNAMIC_LIMIT );
                         })
                     
                     return newResponse.clone();
                 })
         });
+    e.respondWith(respuesta);
 })
 
-//!Problemas con el Cache with network fallback, las peticiones (archivos dinamicos) se mesclan con el app Shell
+//!Problemas con el Cache with network fallback, las peticiones (archivos dinamicos) se mesclan con el app Shell, Solucion: separar el caches
