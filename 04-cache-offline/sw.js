@@ -34,6 +34,7 @@ self.addEventListener('install', event => {
                 '/index.html',
                 '/css/style.css',
                 '/img/main.jpg',
+                '/img/no-img.jpg',
                 '/js/app.js',
             ])
         })
@@ -124,25 +125,71 @@ self.addEventListener('install', event => {
 // * --------------- 4 Cache with network update
 // Util cuando el rendimiento es crítico, que aparezca lo mas rapido posible nuestra aplicacion
 // Nos interesa que siempre este actualizado, pero siempre estara un paso atrás (doble refresh para actualizar todo)
-self.addEventListener('fetch', e => {
-    // si la peticion incluye bootstrap (archivo inmutable), busca en el cache y retornalo
-    if ( e.request.url.includes('bootstrap') ) {
-        return e.respondWith( caches.match( e.request ) );
-    }
+// self.addEventListener('fetch', e => {
+//     // si la peticion incluye bootstrap (archivo inmutable), busca en el cache y retornalo
+//     if ( e.request.url.includes('bootstrap') ) {
+//         return e.respondWith( caches.match( e.request ) );
+//     }
 
-    // Solo vamos a trabajar con el static cache, porque es lo de la app shell, y con esto conseguimos que nuestra pagina carge rapido (necesitamos que el rendimiento sea critico / rapido)
-    const respuesta = caches.open( CACHE_STATIC_NAME ).then( cache => {
-        // Siempre se hace cuando sabemos que el cache lo tenemos, no es algo que sea dinámico
+//     // Solo vamos a trabajar con el static cache, porque es lo de la app shell, y con esto conseguimos que nuestra pagina carge rapido (necesitamos que el rendimiento sea critico / rapido)
+//     const respuesta = caches.open( CACHE_STATIC_NAME ).then( cache => {
+//         // Siempre se hace cuando sabemos que el cache lo tenemos, no es algo que sea dinámico
 
-        // actualizar cache, obtener la ultima version que se encuentre en la web, pero no retorna esta version, solo lo guarda (refrescar la app, aparece esta version)
-        fetch( e.request ).then( newRes => 
-                cache.put( e.request, newRes ));
+//         // actualizar cache, obtener la ultima version que se encuentre en la web, pero no retorna esta version, solo lo guarda (refrescar la app, aparece esta version)
+//         fetch( e.request ).then( newRes => 
+//                 cache.put( e.request, newRes ));
         
-        // retorna con la peticion que concida en el cache, retorna la version anterior en caso de que exista un nuevo cache
-        return cache.match( e.request );
+//         // retorna con la peticion que concida en el cache, retorna la version anterior en caso de que exista un nuevo cache
+//         return cache.match( e.request );
+
+//     });
+//     // responder con la respuesta
+//     e.respondWith( respuesta );
+// })
+//!Problemas no tenedriamos la ultima version de la app, si es que cambio, hasta que refresquemos la pagina otra vez
+
+// * --------------- 5 Cache & Network Race
+// Cual de los dos responde primero, es posible que se tenga un cache lento pero un internet rapido o viseversa
+self.addEventListener('fetch', e => {
+    // el Promise.race no es util, ya que si uno falla, ya no se ejecuta nada
+    // Crear una promesa para que me responca la que se ejecute primero
+    const respuesta = new Promise( (resolve, reject) =>{
+        let rechazada = false; // alguno fue rechazado
+
+        // se ejecuta la funcion, si la peticion fallo (fetch ó cache)
+        const falloUnaVez = () => {
+            // si no ha sido rechazada
+            if ( rechazada ) {
+                // si no fue rechazada, pero no existe ni en el cache ni en la web
+                // si es un archivo de tipo imagen, retonran imagen por defecto
+                if ( /\.(png|jpg)$/i.test(e.request.url) ) {
+                    resolve(caches.match('/img/no-img.jpg') ); // resuelve la promesa con una imagen guardada en el cache
+                } else { 
+                    reject('No se encontro respuesta'); // no es tipo imagen, error
+                }
+            } else {
+                // fue rechazado, sucedio algun problema
+                rechazada = true;
+            }
+
+
+        };
+
+
+        // Peticion al la web
+        fetch( e.request ).then( res => {
+            res.ok ? resolve(res) : falloUnaVez(); // si se ejecuto la peticion, resuelve la promesa, sino ejecuta la funcio de fallo
+        }).catch( falloUnaVez );
+
+        // Peticion al cache
+        caches.match( e.request ).then( res => {
+            res ? resolve( res ) : falloUnaVez(); // si se ejecuto la peticion, resuelve la promesa, sino ejecuta la funcio de fallo
+        }).catch( falloUnaVez );
+
 
     });
-    // responder con la respuesta
+
+
     e.respondWith( respuesta );
 })
 //!Problemas no tenedriamos la ultima version de la app, si es que cambio, hasta que refresquemos la pagina otra vez
